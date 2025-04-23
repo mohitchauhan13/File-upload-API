@@ -20,38 +20,25 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy code and restart server
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_PROJECT_DIR: ${{ secrets.EC2_PROJECT_DIR }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+      - name: Deploy and Restart Server
         run: |
-          ssh $EC2_USER@$EC2_HOST << EOF
-            # Install Node, Git, PM2 if missing
-            command -v git >/dev/null 2>&1 || sudo yum install -y git
-            command -v node >/dev/null 2>&1 || curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash - && sudo yum install -y nodejs
-            command -v pm2 >/dev/null 2>&1 || sudo npm install -g pm2
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            mkdir -p ${{ secrets.EC2_PROJECT_DIR }}
+            cd ${{ secrets.EC2_PROJECT_DIR }}
 
-            # Clone if missing, else pull
-            if [ ! -d "$EC2_PROJECT_DIR" ]; then
-              git clone https://github.com/mohitchauhan13/File-upload-API.git "$EC2_PROJECT_DIR"
+            # Clone repo if not already cloned
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/${{ secrets.GIT_USERNAME }}/File-upload-API.git ./
             fi
 
-            cd "$EC2_PROJECT_DIR"
             git pull origin main
 
-            # Write .env file
-            echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" > .env
-            echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> .env
-            echo "AWS_REGION=$AWS_REGION" >> .env
-            echo "S3_BUCKET_NAME=$S3_BUCKET_NAME" >> .env
+            # Create .env if needed
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" > .env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+            echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> .env
 
             npm install
-
-            # Start or restart server
             pm2 start server.js --name backend --update-env || pm2 restart backend
           EOF
